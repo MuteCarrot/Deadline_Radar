@@ -1,0 +1,31 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Virtual environment
+venv/
+env/
+ENV/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Environment variables
+.env
+
+# Streamlit config
+.streamlit/
+
+# OS generated
+.DS_Store
+Thumbs.db
+
+# Evaluation outputs / temp
+data/raw/
+*.ics
+

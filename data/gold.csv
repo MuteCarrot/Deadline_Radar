@@ -1,0 +1,17 @@
+text,sent_at,expected_category,expected_date,expected_time
+"@all Important: DBMS Assignment 2 submission deadline is 14th Nov 11:59 PM on LMS portal. No extensions will be given.",2026-11-10 09:15,deadline,2026-11-14,23:59
+"Guys attendance ka proxy laga dena please lecture mein",2026-11-10 09:22,chatter,,
+"ML Quiz 1 scheduled for this Friday 14 Nov at 10:00 AM in Audi 2. Syllabus is Modules 1 and 2.",2026-11-10 10:05,event,2026-11-14,10:00
+"Reminder: DBMS Assignment 2 portal closes 14 Nov at 23:59. Pls submit early.",2026-11-10 11:30,deadline,2026-11-14,23:59
+"Koi canteen chal raha hai kya lunch ke liye?",2026-11-10 14:15,chatter,,
+"Notice: ML Quiz 1 has been postponed to next Monday 17 Nov at 10:00 AM due to faculty senate meeting. Venue remains Audi 2.",2026-11-10 16:40,schedule_change,2026-11-17,10:00
+"Robotics Club internal project review cancelled for today. Next sync will be notified later.",2026-11-10 17:05,cancellation,2026-11-10,
+"Operating Systems Lab 4 venue changed from Lab 1 to Room 302 tomorrow at 2:00 PM.",2026-11-10 18:20,schedule_change,2026-11-11,14:00
+"ECE 202 Midsem Exam announced for 20th Nov at 9:30 AM in Exam Hall 1.",2026-11-10 19:45,event,2026-11-20,09:30
+"Bro Vikram check with HOD once, someone in group said ECE 202 exam is shifted to 24th Nov because of Felicity tech fest?",2026-11-10 20:10,schedule_change,2026-11-24,
+"GSoC 2027 orientation session next week, date and venue TBA by Open Source Club.",2026-11-10 21:00,event,,
+"Bhai quiz ka kya scene hai kal padhna hai ya nahi?",2026-11-10 21:30,chatter,,
+"Kal tak Cloud Computing project topic approval form bharna hai mandatory, Google form link pinned.",2026-11-10 22:15,deadline,2026-11-11,23:59
+"Final reminder: DBMS Assignment 2 is due on 14th Nov 11:59 PM.",2026-11-10 22:45,deadline,2026-11-14,23:59
+"yaar mess ka food aaj bohot bekar tha lol",2026-11-10 23:10,chatter,,
+"Computer Networks tutorial cancelled for tomorrow morning.",2026-11-10 23:30,cancellation,2026-11-11,09:00
