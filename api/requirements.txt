@@ -7,3 +7,4 @@ icalendar>=5.0.12
 python-dotenv>=1.0.1
 pytz>=2024.1
 uvicorn>=0.29.0
+
