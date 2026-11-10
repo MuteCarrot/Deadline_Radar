@@ -386,9 +386,9 @@ def update_settings(req: SettingsUpdateRequest):
 
 from fastapi.staticfiles import StaticFiles
 
-# Mount built React frontend if dist exists
+# Mount built React frontend if dist exists (local development mode)
 dist_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend", "dist")
-if os.path.exists(dist_path):
+if not os.getenv("VERCEL") and os.path.exists(dist_path):
     app.mount("/", StaticFiles(directory=dist_path, html=True), name="frontend")
 
 

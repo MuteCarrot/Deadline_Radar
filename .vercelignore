@@ -1,0 +1,10 @@
+venv/
+env/
+.streamlit/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.git/
+tests/
+frontend/node_modules/

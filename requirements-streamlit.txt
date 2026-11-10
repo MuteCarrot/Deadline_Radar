@@ -1,0 +1,4 @@
+# Requirements for running local Streamlit fallback (streamlit run app.py)
+-r requirements.txt
+streamlit>=1.35.0
+pandas>=2.0.0

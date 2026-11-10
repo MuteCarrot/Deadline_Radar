@@ -1,0 +1,11 @@
+{
+  "name": "deadline-radar",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Deadline Radar - Academic productivity dashboard powered by AI for IIIT Hyderabad",
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "uvicorn server:app --reload --port 8000"
+  }
+}

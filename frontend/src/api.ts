@@ -1,11 +1,22 @@
 import { EventItem, OverviewData, SourceIntegration, AppSettings } from './types';
+import {
+  FALLBACK_EVENTS,
+  FALLBACK_OVERVIEW,
+  FALLBACK_SOURCES,
+  FALLBACK_SETTINGS,
+} from './fallbackData';
 
 const BASE_URL = '/api';
 
 export async function fetchOverview(): Promise<OverviewData> {
-  const res = await fetch(`${BASE_URL}/overview`);
-  if (!res.ok) throw new Error('Failed to load overview data');
-  return res.json();
+  try {
+    const res = await fetch(`${BASE_URL}/overview`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.warn('API fetchOverview fallback engaged:', err);
+    return FALLBACK_OVERVIEW;
+  }
 }
 
 export async function fetchEvents(params?: {
@@ -14,21 +25,47 @@ export async function fetchEvents(params?: {
   needs_review?: boolean;
   search?: string;
 }): Promise<EventItem[]> {
-  const query = new URLSearchParams();
-  if (params?.category) query.append('category', params.category);
-  if (params?.status) query.append('status', params.status);
-  if (params?.needs_review !== undefined) query.append('needs_review', String(params.needs_review));
-  if (params?.search) query.append('search', params.search);
+  try {
+    const query = new URLSearchParams();
+    if (params?.category) query.append('category', params.category);
+    if (params?.status) query.append('status', params.status);
+    if (params?.needs_review !== undefined) query.append('needs_review', String(params.needs_review));
+    if (params?.search) query.append('search', params.search);
 
-  const res = await fetch(`${BASE_URL}/events?${query.toString()}`);
-  if (!res.ok) throw new Error('Failed to fetch events');
-  return res.json();
+    const res = await fetch(`${BASE_URL}/events?${query.toString()}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.warn('API fetchEvents fallback engaged:', err);
+    let items = [...FALLBACK_EVENTS];
+    if (params?.category && params.category !== 'all') {
+      items = items.filter(e => e.category === params.category);
+    }
+    if (params?.status && params.status !== 'all') {
+      items = items.filter(e => e.status === params.status);
+    }
+    if (params?.needs_review !== undefined) {
+      items = items.filter(e => Boolean(e.needs_review || e.has_conflict) === params.needs_review);
+    }
+    if (params?.search) {
+      const q = params.search.toLowerCase();
+      items = items.filter(e => e.title.toLowerCase().includes(q) || (e.course_or_subject || '').toLowerCase().includes(q));
+    }
+    return items;
+  }
 }
 
 export async function fetchEventDetail(eventId: string): Promise<EventItem> {
-  const res = await fetch(`${BASE_URL}/events/${eventId}`);
-  if (!res.ok) throw new Error('Failed to fetch event detail');
-  return res.json();
+  try {
+    const res = await fetch(`${BASE_URL}/events/${eventId}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.warn('API fetchEventDetail fallback engaged:', err);
+    const found = FALLBACK_EVENTS.find(e => e.id === eventId);
+    if (!found) throw new Error('Event not found');
+    return found;
+  }
 }
 
 export async function updateEvent(
@@ -109,15 +146,25 @@ export async function loadDataset(key: string): Promise<any> {
 }
 
 export async function fetchSources(): Promise<SourceIntegration[]> {
-  const res = await fetch(`${BASE_URL}/sources`);
-  if (!res.ok) throw new Error('Failed to fetch sources');
-  return res.json();
+  try {
+    const res = await fetch(`${BASE_URL}/sources`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.warn('API fetchSources fallback engaged:', err);
+    return FALLBACK_SOURCES;
+  }
 }
 
 export async function fetchSettings(): Promise<AppSettings> {
-  const res = await fetch(`${BASE_URL}/settings`);
-  if (!res.ok) throw new Error('Failed to fetch settings');
-  return res.json();
+  try {
+    const res = await fetch(`${BASE_URL}/settings`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.warn('API fetchSettings fallback engaged:', err);
+    return FALLBACK_SETTINGS;
+  }
 }
 
 export async function updateSettings(data: { api_key?: string; model?: string }): Promise<any> {
@@ -129,4 +176,3 @@ export async function updateSettings(data: { api_key?: string; model?: string })
   if (!res.ok) throw new Error('Failed to update settings');
   return res.json();
 }
-
