@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, RefreshCw, Sparkles, BookOpen } from 'lucide-react';
+import { Calendar, RefreshCw, Sparkles, BookOpen, ExternalLink } from 'lucide-react';
 import { OverviewData, EventItem } from '../types';
 import { EventCard } from '../components/EventCard';
 import { MiniCalendar } from '../components/MiniCalendar';
@@ -161,26 +161,33 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           </div>
         </div>
 
-        {/* AI Monitoring Banner */}
+        {/* AI Monitoring & Engine Banner */}
         <div className="p-4 rounded-2xl bg-gradient-to-r from-accent-light via-indigo-50 to-purple-50 border border-accent/20 flex items-center justify-between shadow-card">
           <div className="flex items-center gap-3.5">
             <div className="w-10 h-10 rounded-xl bg-accent text-white flex items-center justify-center shrink-0 shadow-sm shadow-accent/30">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-[14px] font-bold text-primaryText">
-                AI is monitoring your sources
+              <div className="text-[14px] font-bold text-primaryText flex items-center gap-2">
+                <span>AI Engine: {overviewData.engine_used || 'Active'}</span>
+                <span className="text-[11px] font-semibold text-accent bg-white px-2 py-0.5 rounded-full border border-accent/20">
+                  {overviewData.active_dataset}
+                </span>
               </div>
               <div className="text-[12px] text-secondaryText">
-                New messages are automatically processed and important updates are highlighted.
+                {metrics.total_messages_parsed} messages parsed • Provenance and exact source notice mapped for all items.
               </div>
             </div>
           </div>
 
           <div className="hidden sm:flex items-center gap-2 pr-2">
-            <span className="text-[12px] font-semibold text-accent bg-white px-3 py-1 rounded-lg shadow-xs">
-              Active
-            </span>
+            <button
+              onClick={() => onNavigate('sources')}
+              className="text-[12px] font-bold text-accent bg-white px-3 py-1.5 rounded-xl shadow-xs hover:bg-slate-50 transition-colors border border-accent/20 flex items-center gap-1"
+            >
+              <span>Inspect Chat Log</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
       </div>

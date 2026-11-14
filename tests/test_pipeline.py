@@ -102,6 +102,47 @@ def test_ics_export():
     assert "DBMS Assignment 2 Submission" in ics_text
 
 
+def test_ai_layer_and_provenance():
+    from extract import extract_with_heuristics
+    from sample_data import load_real_chat_text
+
+    # Test on raw custom chat
+    custom_chat = """[14/11/26, 10:00:00] Prof. Rao: Advanced NLP Quiz 2 scheduled for coming Friday 20 Nov at 11:00 AM in Audi 1.
+[14/11/26, 10:15:00] Student: Canteen mein samosa khatam ho gaya
+[14/11/26, 11:00:00] CR: Reminder to fill Project Topic Approval Google Form by tomorrow 23:59.
+"""
+    msgs = parse_chat(custom_chat, anonymize=True)
+    assert len(msgs) == 3
+
+    # AI Extraction
+    extracted = extract_with_heuristics(msgs)
+    assert len(extracted) == 3
+    
+    # Message 1: Event
+    assert extracted[0]["category"] == "event"
+    assert "NLP" in extracted[0]["title"].upper()
+    assert extracted[0]["date"] == "2026-11-20"
+    assert extracted[0]["time"] == "11:00"
+    assert extracted[0]["venue"] == "Audi 1"
+    assert extracted[0]["message_id"] == 1
+
+    # Message 2: Chatter
+    assert extracted[1]["category"] == "chatter"
+
+    # Message 3: Deadline
+    assert extracted[2]["category"] == "deadline"
+    assert extracted[2]["time"] == "23:59"
+    assert extracted[2]["date"] == "2026-11-15"
+    assert extracted[2]["message_id"] == 3
+
+    # Reconcile & Provenance
+    reconciled = reconcile_events(extracted, msgs)
+    assert len(reconciled) == 2
+    assert reconciled[0]["sources"] == [1]
+    assert reconciled[0]["source_details"][0]["msg_id"] == 1
+    assert "Advanced NLP" in reconciled[0]["source_details"][0]["text"]
+
+
 if __name__ == "__main__":
     print("Running Pipeline Unit Tests...")
     test_parse_chat_formats()
@@ -114,4 +155,6 @@ if __name__ == "__main__":
     print("  [✓] test_reconciliation_pipeline PASSED")
     test_ics_export()
     print("  [✓] test_ics_export PASSED")
-    print("\nAll 5 test suites passed successfully!")
+    test_ai_layer_and_provenance()
+    print("  [✓] test_ai_layer_and_provenance PASSED")
+    print("\nAll 6 test suites passed successfully!")

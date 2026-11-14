@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Upload, FileText, CheckCircle2, Shield, Sparkles, AlertCircle } from 'lucide-react';
+import { X, Upload, FileText, CheckCircle2, Shield, Sparkles, AlertCircle, Key } from 'lucide-react';
 import { importText, importFile, loadDataset } from '../api';
 
 interface ImportModalProps {
@@ -15,9 +15,10 @@ export const ImportModal: React.FC<ImportModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  const [activeTab, setActiveTab] = useState<'upload' | 'paste' | 'courses'>('courses');
+  const [activeTab, setActiveTab] = useState<'upload' | 'paste' | 'courses'>('upload');
   const [pastedText, setPastedText] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [apiKey, setApiKey] = useState('');
   const [anonymize, setAnonymize] = useState(true);
   const [useLiveAi, setUseLiveAi] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -28,9 +29,9 @@ export const ImportModal: React.FC<ImportModalProps> = ({
     setError(null);
     try {
       if (activeTab === 'upload' && selectedFile) {
-        await importFile(selectedFile, anonymize, useLiveAi);
+        await importFile(selectedFile, anonymize, useLiveAi || Boolean(apiKey.trim()), apiKey.trim() || undefined);
       } else if (activeTab === 'paste' && pastedText.trim()) {
-        await importText(pastedText, anonymize, useLiveAi);
+        await importText(pastedText, anonymize, useLiveAi || Boolean(apiKey.trim()), apiKey.trim() || undefined);
       }
       onImportComplete();
       onClose();
@@ -94,14 +95,6 @@ export const ImportModal: React.FC<ImportModalProps> = ({
         {/* Tab Selector */}
         <div className="flex p-1 bg-app rounded-xl border border-border my-4">
           <button
-            onClick={() => setActiveTab('courses')}
-            className={`flex-1 py-1.5 text-[13px] font-semibold rounded-lg transition-all ${
-              activeTab === 'courses' ? 'bg-white text-accent shadow-xs' : 'text-secondaryText hover:text-primaryText'
-            }`}
-          >
-            IIIT-H Course Chats
-          </button>
-          <button
             onClick={() => setActiveTab('upload')}
             className={`flex-1 py-1.5 text-[13px] font-semibold rounded-lg transition-all ${
               activeTab === 'upload' ? 'bg-white text-accent shadow-xs' : 'text-secondaryText hover:text-primaryText'
@@ -117,31 +110,15 @@ export const ImportModal: React.FC<ImportModalProps> = ({
           >
             Paste Text
           </button>
+          <button
+            onClick={() => setActiveTab('courses')}
+            className={`flex-1 py-1.5 text-[13px] font-semibold rounded-lg transition-all ${
+              activeTab === 'courses' ? 'bg-white text-accent shadow-xs' : 'text-secondaryText hover:text-primaryText'
+            }`}
+          >
+            IIIT-H Sample Chats
+          </button>
         </div>
-
-        {/* Courses Tab Content */}
-        {activeTab === 'courses' && (
-          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-            {courseList.map((c) => (
-              <button
-                key={c.key}
-                disabled={isLoading}
-                onClick={() => handleSelectCourse(c.key)}
-                className="w-full text-left p-3 rounded-xl border border-border hover:border-accent hover:bg-accent-light/40 transition-all flex items-start justify-between group"
-              >
-                <div>
-                  <div className="font-semibold text-[14px] text-primaryText group-hover:text-accent">
-                    {c.title}
-                  </div>
-                  <div className="text-[12px] text-secondaryText mt-0.5">{c.desc}</div>
-                </div>
-                <span className="text-[11px] font-bold text-accent bg-accent-light px-2 py-0.5 rounded-md shrink-0 ml-2">
-                  Load
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
 
         {/* Upload Tab Content */}
         {activeTab === 'upload' && (
@@ -178,41 +155,88 @@ export const ImportModal: React.FC<ImportModalProps> = ({
           </div>
         )}
 
-        {/* Privacy & Engine Controls */}
-        <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-[13px]">
-          <label className="flex items-center gap-2 cursor-pointer text-secondaryText select-none">
-            <input
-              type="checkbox"
-              checked={anonymize}
-              onChange={(e) => setAnonymize(e.target.checked)}
-              className="rounded text-accent focus:ring-accent"
-            />
-            <Shield className="w-3.5 h-3.5 text-success" />
-            <span>Anonymize student phone numbers & names</span>
-          </label>
+        {/* Courses Tab Content */}
+        {activeTab === 'courses' && (
+          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+            {courseList.map((c) => (
+              <button
+                key={c.key}
+                disabled={isLoading}
+                onClick={() => handleSelectCourse(c.key)}
+                className="w-full text-left p-3 rounded-xl border border-border hover:border-accent hover:bg-accent-light/40 transition-all flex items-start justify-between group"
+              >
+                <div>
+                  <div className="font-semibold text-[14px] text-primaryText group-hover:text-accent">
+                    {c.title}
+                  </div>
+                  <div className="text-[12px] text-secondaryText mt-0.5">{c.desc}</div>
+                </div>
+                <span className="text-[11px] font-bold text-accent bg-accent-light px-2 py-0.5 rounded-md shrink-0 ml-2">
+                  Load
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
 
-          <label className="flex items-center gap-2 cursor-pointer text-secondaryText select-none">
-            <input
-              type="checkbox"
-              checked={useLiveAi}
-              onChange={(e) => setUseLiveAi(e.target.checked)}
-              className="rounded text-accent focus:ring-accent"
-            />
-            <Sparkles className="w-3.5 h-3.5 text-accent" />
-            <span>Live Gemini Extraction</span>
-          </label>
-        </div>
+        {/* AI Layer & Privacy Controls */}
+        {activeTab !== 'courses' && (
+          <div className="mt-4 pt-3 border-t border-border space-y-3">
+            <div className="p-3 rounded-xl bg-accent-light/40 border border-accent/20 text-[12px] text-accent flex items-start gap-2">
+              <Sparkles className="w-4 h-4 text-accent shrink-0 mt-0.5" />
+              <span>
+                <strong>Active AI Processing:</strong> The AI extraction engine runs directly on your uploaded messages, detecting deadlines, quizzes, venue shifts, and dates (including relative Hinglish like <em>kal, parso</em>) and marking their exact message provenance.
+              </span>
+            </div>
+
+            {/* Optional API Key Input */}
+            <div className="flex items-center gap-2 bg-app p-2 rounded-xl border border-border">
+              <Key className="w-4 h-4 text-secondaryText shrink-0 ml-1" />
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="Gemini API Key (optional - if left blank, uses local heuristic AI)"
+                className="w-full bg-transparent text-[12px] focus:outline-hidden"
+              />
+            </div>
+
+            <div className="flex items-center justify-between text-[13px]">
+              <label className="flex items-center gap-2 cursor-pointer text-secondaryText select-none">
+                <input
+                  type="checkbox"
+                  checked={anonymize}
+                  onChange={(e) => setAnonymize(e.target.checked)}
+                  className="rounded text-accent focus:ring-accent"
+                />
+                <Shield className="w-3.5 h-3.5 text-success" />
+                <span>Anonymize student phone numbers</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer text-secondaryText select-none">
+                <input
+                  type="checkbox"
+                  checked={useLiveAi || Boolean(apiKey.trim())}
+                  onChange={(e) => setUseLiveAi(e.target.checked)}
+                  className="rounded text-accent focus:ring-accent"
+                />
+                <Sparkles className="w-3.5 h-3.5 text-accent" />
+                <span>Prefer Live Gemini</span>
+              </label>
+            </div>
+          </div>
+        )}
 
         {/* Action Button */}
         {activeTab !== 'courses' && (
-          <div className="mt-5">
+          <div className="mt-4">
             <button
               onClick={handleRunImport}
               disabled={isLoading || (activeTab === 'upload' && !selectedFile) || (activeTab === 'paste' && !pastedText.trim())}
-              className="w-full py-2.5 rounded-xl bg-accent text-white font-semibold text-[14px] hover:bg-accent-hover transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full py-2.5 rounded-xl bg-accent text-white font-semibold text-[14px] hover:bg-accent-hover transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-xs"
             >
               {isLoading ? (
-                <span>Extracting with AI...</span>
+                <span>Extracting with AI & Linking Sources...</span>
               ) : (
                 <>
                   <CheckCircle2 className="w-4 h-4" />
@@ -226,4 +250,3 @@ export const ImportModal: React.FC<ImportModalProps> = ({
     </div>
   );
 };
-

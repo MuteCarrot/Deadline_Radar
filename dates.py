@@ -150,5 +150,12 @@ def resolve_date(
     if parsed:
         return parsed.date()
 
+    # 4. Check for absolute date pattern inside phrase or context
+    abs_match = re.search(r"\b(\d{1,2}(?:st|nd|rd|th)?\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*(?:\s+20\d{2})?)\b", f"{phrase} {context_text}", re.I)
+    if abs_match:
+        parsed_abs = dateparser.parse(abs_match.group(1), settings=settings)
+        if parsed_abs:
+            return parsed_abs.date()
+
     return None
 

@@ -1,9 +1,10 @@
-import { EventItem, OverviewData, SourceIntegration, AppSettings } from './types';
+import { EventItem, OverviewData, SourceIntegration, AppSettings, AnnotatedMessage } from './types';
 import {
   FALLBACK_EVENTS,
   FALLBACK_OVERVIEW,
   FALLBACK_SOURCES,
   FALLBACK_SETTINGS,
+  FALLBACK_MESSAGES,
 } from './fallbackData';
 
 const BASE_URL = '/api';
@@ -102,12 +103,13 @@ export async function rejectEvent(eventId: string): Promise<EventItem> {
 export async function importText(
   text: string,
   anonymize: boolean = true,
-  use_live_ai: boolean = false
+  use_live_ai: boolean = false,
+  api_key?: string
 ): Promise<any> {
   const res = await fetch(`${BASE_URL}/import`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, anonymize, use_live_ai }),
+    body: JSON.stringify({ text, anonymize, use_live_ai, api_key }),
   });
   if (!res.ok) {
     const err = await res.json();
@@ -119,12 +121,16 @@ export async function importText(
 export async function importFile(
   file: File,
   anonymize: boolean = true,
-  use_live_ai: boolean = false
+  use_live_ai: boolean = false,
+  api_key?: string
 ): Promise<any> {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('anonymize', String(anonymize));
   formData.append('use_live_ai', String(use_live_ai));
+  if (api_key) {
+    formData.append('api_key', api_key);
+  }
 
   const res = await fetch(`${BASE_URL}/import/file`, {
     method: 'POST',
@@ -153,6 +159,26 @@ export async function fetchSources(): Promise<SourceIntegration[]> {
   } catch (err) {
     console.warn('API fetchSources fallback engaged:', err);
     return FALLBACK_SOURCES;
+  }
+}
+
+export async function fetchMessages(filterCategory?: string): Promise<AnnotatedMessage[]> {
+  try {
+    const query = filterCategory ? `?filter_category=${filterCategory}` : '';
+    const res = await fetch(`${BASE_URL}/messages${query}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.warn('API fetchMessages fallback engaged:', err);
+    let msgs = [...FALLBACK_MESSAGES] as AnnotatedMessage[];
+    if (filterCategory && filterCategory !== 'all') {
+      if (filterCategory === 'notices') {
+        msgs = msgs.filter(m => m.category !== 'chatter');
+      } else {
+        msgs = msgs.filter(m => m.category === filterCategory);
+      }
+    }
+    return msgs;
   }
 }
 

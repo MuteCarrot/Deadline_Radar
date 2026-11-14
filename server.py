@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from parser import parse_chat
-from extract import extract_with_gemini
+from extract import extract_with_gemini, extract_entities
 from reconcile import reconcile_events
 from ics_export import export_to_ics
 from sample_data import (
@@ -50,6 +50,56 @@ class AppState:
         self.is_demo_mode = True
         self.active_dataset = "benchmark_16"
         self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        self.engine_used = "Deterministic Benchmark Engine"
+        self.annotate_messages()
+
+    def annotate_messages(self):
+        """Cross-references raw messages with extracted items and reconciled events to track full provenance."""
+        ext_map = {it.get("message_id"): it for it in self.extracted_items if it.get("message_id") is not None}
+        
+        evt_src_map = {}
+        for evt in self.events:
+            for sid in evt.get("sources", []):
+                evt_src_map[sid] = evt
+
+        for m in self.messages:
+            mid = m["id"]
+            ext = ext_map.get(mid)
+            evt = evt_src_map.get(mid)
+
+            if evt:
+                m["category"] = evt.get("category", "event")
+                m["title"] = evt.get("title")
+                m["event_id"] = evt.get("id")
+                m["confidence"] = evt.get("confidence", 0.9)
+                m["is_event_source"] = True
+                m["has_conflict"] = evt.get("has_conflict", False)
+                m["conflict_reason"] = evt.get("conflict_reason")
+                m["date"] = str(evt.get("date")) if evt.get("date") else None
+                m["time"] = evt.get("time")
+                m["venue"] = evt.get("venue")
+            elif ext and ext.get("category") != "chatter":
+                m["category"] = ext.get("category", "event")
+                m["title"] = ext.get("title")
+                m["event_id"] = None
+                m["confidence"] = ext.get("confidence", 0.8)
+                m["is_event_source"] = False
+                m["has_conflict"] = False
+                m["conflict_reason"] = None
+                m["date"] = str(ext.get("date")) if ext.get("date") else None
+                m["time"] = ext.get("time")
+                m["venue"] = ext.get("venue")
+            else:
+                m["category"] = "chatter"
+                m["title"] = None
+                m["event_id"] = None
+                m["confidence"] = 0.99
+                m["is_event_source"] = False
+                m["has_conflict"] = False
+                m["conflict_reason"] = None
+                m["date"] = None
+                m["time"] = None
+                m["venue"] = None
 
 state = AppState()
 
@@ -69,6 +119,7 @@ class ImportTextRequest(BaseModel):
     text: str
     anonymize: bool = True
     use_live_ai: bool = False
+    api_key: Optional[str] = None
 
 
 class SettingsUpdateRequest(BaseModel):
@@ -99,6 +150,8 @@ def get_overview():
     active_all = [e for e in state.events if e.get("status") != "Cancelled" and e.get("date")]
     active_all.sort(key=lambda e: str(e.get("date") or "9999-99-99"))
 
+    annotated_sources = len([m for m in state.messages if m.get("is_event_source")])
+
     return {
         "metrics": {
             "active_deadlines": len(deadlines),
@@ -106,12 +159,14 @@ def get_overview():
             "updated_postponed": len(updated),
             "needs_review": len(needs_review),
             "total_messages_parsed": len(state.messages),
+            "annotated_sources": annotated_sources,
         },
         "upcoming_agenda": active_all[:8],
         "recent_updates": updated[:5],
         "needs_review_items": needs_review,
         "active_dataset": state.active_dataset,
         "is_demo_mode": state.is_demo_mode,
+        "engine_used": state.engine_used,
     }
 
 
@@ -208,28 +263,34 @@ def import_text(req: ImportTextRequest):
     state.raw_text = raw
     state.messages = parse_chat(raw, anonymize=req.anonymize)
 
-    if req.use_live_ai:
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=400, detail="Gemini API Key missing. Set GEMINI_API_KEY in Settings.")
-        state.extracted_items = extract_with_gemini(state.messages, api_key=api_key, model_name=state.gemini_model)
-        state.is_demo_mode = False
-    else:
-        # Default fallback extraction
-        state.extracted_items = list(SAMPLE_DETERMINISTIC_EXTRACTION)
-        state.is_demo_mode = True
-
+    api_key = req.api_key or os.getenv("GEMINI_API_KEY")
+    state.extracted_items, state.engine_used = extract_entities(
+        state.messages,
+        api_key=api_key,
+        model_name=state.gemini_model,
+        prefer_live_ai=req.use_live_ai or bool(api_key)
+    )
+    state.is_demo_mode = not bool(api_key and req.use_live_ai)
     state.events = reconcile_events(state.extracted_items, state.messages)
+    state.annotate_messages()
+    state.active_dataset = "Custom Uploaded Chat"
+
     return {
         "status": "success",
         "messages_parsed": len(state.messages),
         "events_reconciled": len(state.events),
+        "engine_used": state.engine_used,
         "is_demo_mode": state.is_demo_mode,
     }
 
 
 @app.post("/api/import/file")
-async def import_file(file: UploadFile = File(...), anonymize: bool = Form(True), use_live_ai: bool = Form(False)):
+async def import_file(
+    file: UploadFile = File(...),
+    anonymize: bool = Form(True),
+    use_live_ai: bool = Form(False),
+    api_key: Optional[str] = Form(None)
+):
     content = await file.read()
     raw = content.decode("utf-8", errors="ignore").strip()
     if not raw:
@@ -238,22 +299,24 @@ async def import_file(file: UploadFile = File(...), anonymize: bool = Form(True)
     state.raw_text = raw
     state.messages = parse_chat(raw, anonymize=anonymize)
 
-    if use_live_ai:
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=400, detail="Gemini API Key missing. Configure in Settings.")
-        state.extracted_items = extract_with_gemini(state.messages, api_key=api_key, model_name=state.gemini_model)
-        state.is_demo_mode = False
-    else:
-        state.extracted_items = list(SAMPLE_DETERMINISTIC_EXTRACTION)
-        state.is_demo_mode = True
-
+    key = api_key or os.getenv("GEMINI_API_KEY")
+    state.extracted_items, state.engine_used = extract_entities(
+        state.messages,
+        api_key=key,
+        model_name=state.gemini_model,
+        prefer_live_ai=use_live_ai or bool(key)
+    )
+    state.is_demo_mode = not bool(key and use_live_ai)
     state.events = reconcile_events(state.extracted_items, state.messages)
+    state.annotate_messages()
+    state.active_dataset = f"Uploaded File: {file.filename}"
+
     return {
         "status": "success",
         "filename": file.filename,
         "messages_parsed": len(state.messages),
         "events_reconciled": len(state.events),
+        "engine_used": state.engine_used,
     }
 
 
@@ -265,7 +328,9 @@ def load_dataset(key: str):
         state.extracted_items = list(SAMPLE_DETERMINISTIC_EXTRACTION)
         state.events = reconcile_events(state.extracted_items, state.messages)
         state.active_dataset = "benchmark_16"
+        state.engine_used = "Deterministic Benchmark Engine"
         state.is_demo_mode = True
+        state.annotate_messages()
     elif key in REAL_COURSE_DATASETS:
         folder = REAL_COURSE_DATASETS[key]["folder"]
         raw = load_real_chat_text(folder)
@@ -274,7 +339,9 @@ def load_dataset(key: str):
         state.extracted_items = list(REAL_COURSE_DATASETS[key]["deterministic_extractions"])
         state.events = reconcile_events(state.extracted_items, state.messages)
         state.active_dataset = key
+        state.engine_used = f"Verified IIIT-H M26 Extraction ({REAL_COURSE_DATASETS[key]['folder']})"
         state.is_demo_mode = True
+        state.annotate_messages()
     elif key == "m26_all":
         raw = get_all_real_chats_combined()
         state.raw_text = raw
@@ -285,7 +352,9 @@ def load_dataset(key: str):
         state.extracted_items = all_dets
         state.events = reconcile_events(all_dets, state.messages)
         state.active_dataset = "m26_all"
+        state.engine_used = "Combined 4-Course Multi-Channel Feed"
         state.is_demo_mode = True
+        state.annotate_messages()
     else:
         raise HTTPException(status_code=404, detail="Dataset key not recognized")
 
@@ -294,6 +363,7 @@ def load_dataset(key: str):
         "active_dataset": state.active_dataset,
         "messages_parsed": len(state.messages),
         "events_count": len(state.events),
+        "engine_used": state.engine_used,
     }
 
 
@@ -353,16 +423,33 @@ def export_json():
 
 
 @app.get("/api/messages")
-def list_raw_messages():
-    return [
-        {
+def list_raw_messages(filter_category: Optional[str] = None):
+    res = []
+    for m in state.messages:
+        cat = m.get("category", "chatter")
+        if filter_category and filter_category != "all":
+            if filter_category == "notices" and cat == "chatter":
+                continue
+            elif filter_category != "notices" and cat != filter_category:
+                continue
+
+        res.append({
             "id": m["id"],
             "sender": m["sender"],
             "sent_at": m["sent_at"].strftime("%Y-%m-%d %H:%M") if hasattr(m["sent_at"], "strftime") else str(m["sent_at"]),
-            "text": m["text"]
-        }
-        for m in state.messages
-    ]
+            "text": m["text"],
+            "category": cat,
+            "title": m.get("title"),
+            "event_id": m.get("event_id"),
+            "confidence": m.get("confidence", 0.9),
+            "is_event_source": m.get("is_event_source", False),
+            "has_conflict": m.get("has_conflict", False),
+            "conflict_reason": m.get("conflict_reason"),
+            "date": m.get("date"),
+            "time": m.get("time"),
+            "venue": m.get("venue"),
+        })
+    return res
 
 
 @app.get("/api/settings")

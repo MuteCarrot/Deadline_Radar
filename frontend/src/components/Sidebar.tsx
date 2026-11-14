@@ -31,7 +31,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, metri
       badge: metrics.needs_review > 0 ? metrics.needs_review : undefined,
       badgeType: 'warning',
     },
-    { id: 'sources', label: 'Sources', icon: Layers, dot: true },
+    { id: 'sources', label: 'Chat & Sources', icon: Layers, dot: true },
     { id: 'calendar', label: 'Calendar & Reminders', icon: CalendarDays },
   ];
 

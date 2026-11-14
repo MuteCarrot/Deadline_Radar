@@ -91,14 +91,18 @@ export const EventCard: React.FC<EventCardProps> = ({ event, onClick }) => {
             </span>
           </div>
 
-          <div className="text-[12px] text-secondaryText/80 flex items-center gap-1.5 mt-1 font-medium">
+          <div className="text-[12px] text-secondaryText/80 flex items-center gap-1.5 mt-1 font-medium flex-wrap">
             <Clock className="w-3 h-3 text-secondaryText/70" />
             <span>{relativeText}</span>
-            {event.sources.length > 1 && (
-              <span className="text-[11px] text-accent bg-accent-light px-1.5 py-0.2 rounded font-semibold ml-2">
-                {event.sources.length} notices merged
+            {event.sources && event.sources.length > 1 ? (
+              <span className="text-[11px] text-accent bg-accent-light px-2 py-0.5 rounded font-semibold ml-2 border border-accent/20">
+                📍 Found in {event.sources.length} notices
               </span>
-            )}
+            ) : event.sources && event.sources.length === 1 ? (
+              <span className="text-[11px] text-slate-700 bg-slate-100 px-2 py-0.5 rounded font-medium ml-2 border border-slate-200">
+                📍 Found in Msg #{event.sources[0]}
+              </span>
+            ) : null}
           </div>
         </div>
       </div>

@@ -168,7 +168,13 @@ export const App: React.FC = () => {
             )}
 
             {currentView === 'sources' && (
-              <SourcesView onOpenImport={() => setIsImportOpen(true)} />
+              <SourcesView
+                onOpenImport={() => setIsImportOpen(true)}
+                onSelectEvent={(eventId) => {
+                  const evt = events.find((e) => e.id === eventId);
+                  if (evt) setSelectedEvent(evt);
+                }}
+              />
             )}
 
             {currentView === 'calendar' && (
@@ -191,6 +197,20 @@ export const App: React.FC = () => {
         onConfirm={handleConfirm}
         onReject={handleReject}
         onSave={handleSave}
+        onLocateInChat={(msgId) => {
+          setCurrentView('sources');
+          setSelectedEvent(null);
+          setTimeout(() => {
+            const el = document.getElementById(`chat-msg-${msgId}`);
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              el.classList.add('ring-4', 'ring-accent', 'scale-[1.01]');
+              setTimeout(() => {
+                el.classList.remove('ring-4', 'ring-accent', 'scale-[1.01]');
+              }, 3000);
+            }
+          }, 250);
+        }}
       />
 
       {/* Import Modal */}

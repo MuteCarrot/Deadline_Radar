@@ -12,6 +12,7 @@ import {
   MessageSquare,
   AlertTriangle,
   History,
+  ExternalLink,
 } from 'lucide-react';
 import { EventItem } from '../types';
 
@@ -21,6 +22,7 @@ interface EventDetailDrawerProps {
   onConfirm: (id: string) => void;
   onReject: (id: string) => void;
   onSave: (id: string, updated: Partial<EventItem>) => void;
+  onLocateInChat?: (msgId: number) => void;
 }
 
 export const EventDetailDrawer: React.FC<EventDetailDrawerProps> = ({
@@ -29,6 +31,7 @@ export const EventDetailDrawer: React.FC<EventDetailDrawerProps> = ({
   onConfirm,
   onReject,
   onSave,
+  onLocateInChat,
 }) => {
   if (!event) return null;
 
@@ -257,13 +260,26 @@ export const EventDetailDrawer: React.FC<EventDetailDrawerProps> = ({
               {event.source_details?.map((src) => (
                 <div
                   key={src.msg_id}
-                  className="p-3 rounded-xl bg-app border border-border text-[13px]"
+                  className="p-3.5 rounded-xl bg-app border border-border text-[13px] space-y-1.5"
                 >
-                  <div className="flex items-center justify-between text-[11px] text-secondaryText font-semibold mb-1">
-                    <span>Msg #{src.msg_id} • {src.sender}</span>
+                  <div className="flex items-center justify-between text-[11px] text-secondaryText font-semibold">
+                    <span className="font-mono bg-white px-2 py-0.5 rounded border border-border text-slate-800">
+                      Msg #{src.msg_id} • {src.sender}
+                    </span>
                     <span>{src.sent_at}</span>
                   </div>
                   <p className="text-primaryText font-medium italic">"{src.text}"</p>
+                  {onLocateInChat && (
+                    <div className="pt-1 flex justify-end">
+                      <button
+                        onClick={() => onLocateInChat(src.msg_id)}
+                        className="text-[11px] font-semibold text-accent hover:underline flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-accent/20"
+                      >
+                        <span>View in Chat Stream</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

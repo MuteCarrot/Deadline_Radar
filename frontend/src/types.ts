@@ -25,12 +25,30 @@ export interface EventItem {
   confirmed: boolean;
 }
 
+export interface AnnotatedMessage {
+  id: number;
+  sender: string;
+  sent_at: string;
+  text: string;
+  category: 'deadline' | 'event' | 'schedule_change' | 'cancellation' | 'chatter';
+  title: string | null;
+  event_id: string | null;
+  confidence: number;
+  is_event_source: boolean;
+  has_conflict: boolean;
+  conflict_reason: string | null;
+  date: string | null;
+  time: string | null;
+  venue: string | null;
+}
+
 export interface OverviewMetrics {
   active_deadlines: number;
   upcoming_events: number;
   updated_postponed: number;
   needs_review: number;
   total_messages_parsed: number;
+  annotated_sources?: number;
 }
 
 export interface OverviewData {
@@ -40,6 +58,7 @@ export interface OverviewData {
   needs_review_items: EventItem[];
   active_dataset: string;
   is_demo_mode: boolean;
+  engine_used?: string;
 }
 
 export interface SourceIntegration {
@@ -58,4 +77,3 @@ export interface AppSettings {
   timezone: string;
   active_dataset: string;
 }
-

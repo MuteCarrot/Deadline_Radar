@@ -1,14 +1,17 @@
 """
 Deadline Radar - AI Extraction Engine
-Powered by the official Google GenAI Python SDK.
+Powered by the official Google GenAI Python SDK (`google-genai`) with
+an intelligent rule-based multilingual campus extractor fallback.
 Extracts structured deadline and event entities from multilingual campus chats:
 English, Hindi, Roman Hindi, and Hinglish.
 """
 
 import os
+import re
 import json
 import logging
 from typing import List, Dict, Any, Optional
+from dates import resolve_date, parse_time_string
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +61,201 @@ STRICT EXTRACTION RULES:
 8. Keep "title" consistent across repeated reminders of the same item so they can be merged.
 """
 
+# Multilingual pattern definitions for campus extraction
+CHATTER_PATTERNS = [
+    r"\b(proxy|attendance|canteen|food|lunch|dinner|mess|lol|haha|lmao|treat|party|chai|coffee|bakwas|bekar)\b",
+    r"\b(kya scene hai|padhna hai ya nahi|chal raha hai kya|kaise ho|mast hai)\b",
+    r"^(ok|okay|k|cool|thx|thanks|thank you|done|noted|yes|haan|ha|theek hai)[.!]?$",
+]
+
+COURSES = [
+    ("Machine Learning", ["machine learning", r"\bml\b"]),
+    ("NLP", ["nlp", "natural language processing"]),
+    ("DBMS", ["dbms", "database"]),
+    ("Operating Systems", ["operating systems", r"\bos\b"]),
+    ("Computer Networks", ["computer networks", r"\bcn\b"]),
+    ("ECE 202", ["ece 202", r"\bece\b"]),
+    ("Cloud Computing", ["cloud computing", r"\bcc\b"]),
+    ("Product Management", ["product management", r"\bpm\b"]),
+    ("Design Thinking", ["design thinking", r"\bdt\b"]),
+    ("Business Fundamentals", ["business fundamentals", r"\bbf\b"]),
+    ("AI for PM", ["ai for product managers", "ai for pm", "raman sir"]),
+    ("Robotics Club", ["robotics club", "robotics"]),
+    ("Open Source Club", ["open source club", "gsoc"]),
+]
+
+VENUES = [
+    r"Audi(?:torium)?\s*\d+",
+    r"Room\s*\d+",
+    r"Lab\s*\d+",
+    r"Exam Hall\s*\d*",
+    r"Hall\s*\d+",
+    r"LMS\s*(?:Portal)?",
+    r"Google\s*Forms?(?:\s*\([^)]+\))?",
+    r"Moodle",
+    r"CRC\s*Room",
+    r"SH\d+",
+    r"H\d+",
+    r"Vindhya\s*[A-Z0-9]+",
+    r"forms\.gle/\S+",
+]
+
+
+def extract_with_heuristics(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Intelligent heuristic extractor for multilingual university chats.
+    Extracts deadlines, events, dates (absolute & Hinglish relative), times,
+    courses, and cancellations directly from message text without requiring external API keys.
+    """
+    extracted_items: List[Dict[str, Any]] = []
+
+    for m in messages:
+        text = m.get("text", "")
+        sender = m.get("sender", "Unknown")
+        sent_at = m.get("sent_at")
+
+        # 1. Chatter Check FIRST
+        if any(re.search(p, text, re.I) for p in CHATTER_PATTERNS):
+            extracted_items.append({
+                "message_id": m["id"],
+                "category": "chatter",
+                "title": None,
+                "date": None,
+                "original_date_phrase": None,
+                "time": None,
+                "venue": None,
+                "course_or_subject": None,
+                "audience": None,
+                "refers_to": None,
+                "source_message": text,
+                "confidence": 0.99,
+                "explanation": "Casual message or student banter without academic deadlines/events."
+            })
+            continue
+
+        # 2. Category Detection
+        category = "chatter"
+        if re.search(r"\b(cancelled|canceled|cancel|no class|suspended|called off|chhutti|holiday|tutorial cancelled)\b", text, re.I):
+            category = "cancellation"
+        elif re.search(r"\b(postponed|postpone|rescheduled|reschedule|shifted|shifted to|shift ho gaya|delayed|preponed|venue changed|venue change|room changed|room change|moved to)\b", text, re.I):
+            category = "schedule_change"
+        elif re.search(r"\b(deadline|submit|submission|due date|due on|due|last date|form bharna|fill the form|google form|forms\.gle|portal close|portal closes|assignment|project report|upload on|hw|homework|registration closes|fee payment|pay before)\b", text, re.I):
+            category = "deadline"
+        elif re.search(r"\b(quiz|exam|midsem|endsem|test|lecture|session|orientation|meeting|sync|workshop|seminar|talk|tutorial|lab|review|presentation|hackathon|fest|ceremony|class)\b", text, re.I):
+            category = "event"
+
+        if category == "chatter":
+            extracted_items.append({
+                "message_id": m["id"],
+                "category": "chatter",
+                "title": None,
+                "date": None,
+                "original_date_phrase": None,
+                "time": None,
+                "venue": None,
+                "course_or_subject": None,
+                "audience": None,
+                "refers_to": None,
+                "source_message": text,
+                "confidence": 0.95,
+                "explanation": "Informal peer message without actionable deadline or event."
+            })
+            continue
+
+        # 3. Course detection
+        course = None
+        for c_name, patterns in COURSES:
+            if any(re.search(p, text, re.I) for p in patterns):
+                course = c_name
+                break
+
+        if not course:
+            # Check for dynamic course codes or title prefix before Quiz/Exam/Assignment/Lab
+            dyn_m = re.search(r"\b([A-Z][A-Za-z0-9_-]*(?:\s+[A-Z][A-Za-z0-9_-]*)*)\s+(?:Quiz|Assignment|Exam|Lab|Midsem|Endsem|Project|Tutorial)\b", text)
+            if dyn_m:
+                course = dyn_m.group(1).strip()
+            else:
+                acro_m = re.search(r"\b([A-Z]{2,4}\s*\d{0,3})\b", text)
+                if acro_m and acro_m.group(1).strip() not in ("AM", "PM", "IST", "LMS", "CRC"):
+                    course = acro_m.group(1).strip()
+
+        # 4. Venue detection
+        venue = None
+        for vp in VENUES:
+            vm = re.search(vp, text, re.I)
+            if vm:
+                venue = vm.group(0).strip()
+                break
+
+        # 5. Time detection
+        time_val = None
+        tm = re.search(r"(\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM)|\d{1,2}:\d{2}|\d{1,2}\s*baje)", text)
+        if tm:
+            time_val = parse_time_string(tm.group(0), text)
+
+        # 6. Date detection (Fixed regex: prevent capturing hours as years)
+        date_val = None
+        date_phrase = None
+        dm = re.search(r"\b(kal tak|kal subah|kal shaam|kal|parso|tarso|aaj|tomorrow|today|this Friday|next Monday|coming Friday|next week|\d{1,2}(?:st|nd|rd|th)?\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*(?:\s+20\d{2})?|\d{1,2}[/-]\d{1,2}(?:[/-]20\d{2})?)\b", text, re.I)
+        if dm:
+            date_phrase = dm.group(0)
+            resolved = resolve_date(None, date_phrase, sent_at, context_text=text)
+            if resolved:
+                date_val = resolved.strftime("%Y-%m-%d")
+
+        # 7. Title synthesis
+        kw_match = re.search(r"\b(Assignment\s*\d+|Quiz\s*\d+|Midsem(?:\s*Exam)?|Endsem(?:\s*Exam)?|Lab\s*\d+|Project Topic Approval|Orientation Session|Internal Project Review|Tutorial|Lecture|Team Selection Form)\b", text, re.I)
+        kw = kw_match.group(0) if kw_match else None
+        
+        if kw:
+            if course and course.lower() not in kw.lower():
+                title = f"{course} {kw}"
+            else:
+                title = kw
+        elif course:
+            if category == "deadline":
+                title = f"{course} Submission Deadline"
+            elif category == "event":
+                title = f"{course} Academic Session"
+            elif category == "cancellation":
+                title = f"{course} Session Cancelled"
+            else:
+                title = f"{course} Notice"
+        else:
+            words = text.split()[:5]
+            title = " ".join(words)
+
+        if category == "deadline" and not title.lower().endswith(("submission", "deadline", "form", "approval")):
+            title += " Submission"
+
+        refers_to = title.replace(" Cancelled", "").replace(" Postponed", "") if category in ("cancellation", "schedule_change") else None
+
+        # Confidence calculation
+        conf = 0.85
+        if date_val: conf += 0.05
+        if time_val: conf += 0.04
+        if venue: conf += 0.04
+        if "someone in group said" in text.lower() or "check with" in text.lower():
+            conf = 0.65
+
+        extracted_items.append({
+            "message_id": m["id"],
+            "category": category,
+            "title": title.title(),
+            "date": date_val,
+            "original_date_phrase": date_phrase,
+            "time": time_val,
+            "venue": venue,
+            "course_or_subject": course,
+            "audience": "All Students",
+            "refers_to": refers_to,
+            "source_message": text,
+            "confidence": round(min(conf, 0.98), 2),
+            "explanation": f"Pattern detection identified {category} for {course or 'campus notice'} with date phrase '{date_phrase or 'unspecified'}'."
+        })
+
+    return extracted_items
+
 
 def extract_with_gemini(
     messages: List[Dict[str, Any]],
@@ -71,7 +269,7 @@ def extract_with_gemini(
     """
     active_key = api_key or os.getenv("GEMINI_API_KEY")
     if not active_key or not active_key.strip():
-        raise ValueError("Missing Gemini API Key. Please provide a key in the sidebar or via GEMINI_API_KEY.")
+        raise ValueError("Missing Gemini API Key. Please provide a key in Settings or via GEMINI_API_KEY.")
 
     active_model = model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
@@ -82,7 +280,6 @@ def extract_with_gemini(
         client = genai.Client(api_key=active_key.strip())
         use_new_sdk = True
     except ImportError:
-        # Fallback to legacy google-generativeai if new SDK not available
         try:
             import google.generativeai as legacy_genai
             legacy_genai.configure(api_key=active_key.strip())
@@ -114,7 +311,6 @@ def extract_with_gemini(
 
         try:
             if use_new_sdk:
-                # Official Google GenAI SDK v0.1+
                 response = client.models.generate_content(
                     model=active_model,
                     contents=prompt_text,
@@ -125,14 +321,12 @@ def extract_with_gemini(
                 )
                 raw_json = response.text
             else:
-                # Legacy SDK fallback
                 response = client.generate_content(
                     prompt_text,
                     generation_config={"response_mime_type": "application/json", "temperature": 0.0}
                 )
                 raw_json = response.text
 
-            # Clean and parse JSON
             cleaned_json = raw_json.strip()
             if cleaned_json.startswith("```json"):
                 cleaned_json = cleaned_json[7:]
@@ -144,7 +338,6 @@ def extract_with_gemini(
             parsed_data = json.loads(cleaned_json.strip())
             items = parsed_data.get("items", [])
             
-            # Attach source_message text for provenance
             for it in items:
                 mid = it.get("message_id")
                 matching_msg = next((m for m in batch if m["id"] == mid), None)
@@ -159,3 +352,28 @@ def extract_with_gemini(
 
     return all_extracted_items
 
+
+def extract_entities(
+    messages: List[Dict[str, Any]],
+    api_key: Optional[str] = None,
+    model_name: Optional[str] = None,
+    prefer_live_ai: bool = True
+) -> Tuple[List[Dict[str, Any]], str]:
+    """
+    Unified extraction router:
+    - If prefer_live_ai and API key available: runs Gemini LLM.
+    - If Gemini fails or no API key: smoothly falls back to multilingual heuristic extraction.
+    Returns (extracted_items, engine_used).
+    """
+    active_key = api_key or os.getenv("GEMINI_API_KEY")
+    if prefer_live_ai and active_key and active_key.strip():
+        try:
+            items = extract_with_gemini(messages, api_key=active_key, model_name=model_name)
+            return items, f"Gemini ({model_name or 'gemini-2.5-flash'})"
+        except Exception as e:
+            logger.warning(f"Live Gemini extraction failed ({e}), falling back to campus heuristic engine.")
+            items = extract_with_heuristics(messages)
+            return items, "Multilingual Heuristic AI Engine (Gemini fallback)"
+
+    items = extract_with_heuristics(messages)
+    return items, "Multilingual Heuristic AI Engine"
